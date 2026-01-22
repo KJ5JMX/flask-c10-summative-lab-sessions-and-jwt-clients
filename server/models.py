@@ -36,7 +36,7 @@ class User(db.Model):
     def set_password(self, password):
         if not password or len(password) < 6:
             raise ValueError("password must be at least 6 characters long")
-        hashed = bcrypt.generate_password_hash(password.encode('utf-8 '))
+        hashed = bcrypt.generate_password_hash(password.encode('utf-8'))
         self.password_hash = hashed.decode('utf-8') 
 
     def check_password(self, password: str) -> bool:
