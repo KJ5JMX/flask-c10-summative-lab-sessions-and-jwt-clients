@@ -8,7 +8,7 @@ from flask_jwt_extended import   (
     get_jwt_identity,
 
 )
-import jwt
+
 from sqlalchemy.exc import IntegrityError
 from models import User, Note
 from flask_jwt_extended import JWTManager
@@ -85,6 +85,112 @@ def create_app():
         
         access_token = create_access_token(identity=user.id)
         return jsonify({"access_token": access_token}), 200
+    
+
+    #notes
+    @app.get("/notes")
+    @jwt_required()
+    def get_notes():
+        user_id = get_jwt_identity()
+
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 10, type=int)
+
+        pagination = (
+            Note.query
+            .filter_by(user_id=user_id)
+            .paginate(page=page, per_page=per_page, error_out=False)
+        )
+
+        notes = [note.to_dict() for note in pagination.items]
+        return jsonify({
+            "notes": notes, 
+            "page": page, 
+            "per_page": per_page,
+            "total": pagination.total,
+        }), 200
+    
+
+    #notes create
+    @app.post("/notes")
+    @jwt_required()
+    def create_note():
+        user_id = get_jwt_identity()
+        data = request.get_json() or {}
+
+        title = (data.get("title") or "").strip()
+        content = (data.get("content") or "").strip()
+
+        if not title:
+            return jsonify({"error": "title is required"}), 400
+        if not content:
+            return jsonify({"error": "content is required"}), 400
+        
+        try:
+            note = Note(user_id=user_id, title=title, content=content)
+            db.session.add(note)
+            db.session.commit()
+        except ValueError as ve:
+            db.session.rollback()
+            return jsonify({"error": str(ve)}), 400
+        
+        return jsonify(note.to_dict()), 201
+    
+
+
+    @app.get("/notes/<int:note_id>")
+    @jwt_required()
+    def get_note(note_id):
+        user_id = get_jwt_identity()
+
+        note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+        if not note:
+            return jsonify({"error": "note not found"}), 404
+
+        return jsonify(note.to_dict()), 200
+
+
+    @app.patch("/notes/<int:note_id>")
+    @jwt_required()
+    def update_note(note_id):
+        user_id = get_jwt_identity()
+        note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+
+        if not note:
+            return jsonify({"error": "note not found"}), 404
+
+        data = request.get_json() or {}
+
+        if "title" not in data and "content" not in data:
+            return jsonify({"error": "title or content required to update"}), 400
+
+        
+        if "title" in data:
+            note.title = (data.get("title") or "").strip()
+        if "content" in data:
+            note.content = (data.get("content") or "").strip()
+
+        try:
+            db.session.commit()
+        except ValueError as ev:
+            db.session.rollback()
+            return jsonify({"error": str(ev)}), 400
+
+        return jsonify(note.to_dict()), 200
+
+
+    @app.delete("/notes/<int:note_id>")
+    @jwt_required()
+    def delete_note(note_id):
+        user_id = get_jwt_identity()
+        note = Note.query.filter_by(id=note_id, user_id=user_id).first()
+
+        if not note:
+            return jsonify({"error": "note not found"}), 404
+
+        db.session.delete(note)
+        db.session.commit()
+        return "", 204
 
 
     
